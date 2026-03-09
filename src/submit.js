@@ -6,12 +6,15 @@ const CSRF = process.env.LEETCODE_CSRF;
 
 if (!SESSION || !CSRF) {
   console.error("❌ Missing LEETCODE_SESSION or LEETCODE_CSRF in environment.");
+  console.error("   Set LEETCODE_SESSION and LEETCODE_CSRF as environment variables or in .env");
   process.exit(1);
 }
 
+console.log(`🔑 SESSION length: ${SESSION.length} chars`);
+console.log(`🔑 CSRF length   : ${CSRF.length} chars`);
+
 // Two Sum — hash map O(n) solution in JavaScript
-const TWO_SUM_CODE = `
-/**
+const TWO_SUM_CODE = `/**
  * @param {number[]} nums
  * @param {number} target
  * @return {number[]}
@@ -23,35 +26,69 @@ var twoSum = function(nums, target) {
         if (map[complement] !== undefined) return [map[complement], i];
         map[nums[i]] = i;
     }
-};
-`.trim();
+};`;
 
+// LeetCode requires these exact headers — any missing one causes 403 or silent failure
 const HEADERS = {
   "Content-Type": "application/json",
+  Accept: "application/json, text/javascript, */*; q=0.01",
+  "Accept-Language": "en-US,en;q=0.9",
   Cookie: `LEETCODE_SESSION=${SESSION}; csrftoken=${CSRF}`,
-  "x-csrftoken": CSRF,
-  Referer: "https://leetcode.com/problems/two-sum/",
+  // LeetCode checks for capital X-CSRFToken — lowercase causes 403
+  "X-CSRFToken": CSRF,
+  Referer: "https://leetcode.com/problems/two-sum/description/",
   Origin: "https://leetcode.com",
+  "X-Requested-With": "XMLHttpRequest",
   "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
 };
 
 async function submitSolution() {
-  console.log("🚀 Submitting Two Sum to LeetCode...");
+  console.log("\n🚀 Submitting Two Sum to LeetCode...");
 
+  const body = {
+    lang: "javascript",
+    question_id: "1",
+    typed_code: TWO_SUM_CODE,
+  };
+
+  console.log("   POST https://leetcode.com/problems/two-sum/submit/");
+  console.log("   Body:", JSON.stringify({ ...body, typed_code: "[omitted]" }));
+
+  // validateStatus: always resolve so we can log the full response on failure
   const res = await axios.post(
     "https://leetcode.com/problems/two-sum/submit/",
+    body,
     {
-      lang: "javascript",
-      question_id: "1",
-      typed_code: TWO_SUM_CODE,
-    },
-    { headers: HEADERS }
+      headers: HEADERS,
+      validateStatus: () => true,
+    }
   );
 
-  const submissionId = res.data.submission_id;
+  console.log(`   HTTP Status: ${res.status}`);
+
+  if (res.status === 403) {
+    console.error("❌ 403 Forbidden — your CSRF token or session cookie is wrong/expired.");
+    console.error("   Response body:", JSON.stringify(res.data));
+    process.exit(1);
+  }
+
+  if (res.status === 401) {
+    console.error("❌ 401 Unauthorized — your LEETCODE_SESSION cookie is wrong or expired.");
+    console.error("   Response body:", JSON.stringify(res.data));
+    process.exit(1);
+  }
+
+  if (res.status !== 200) {
+    console.error(`❌ Unexpected HTTP ${res.status}`);
+    console.error("   Response body:", JSON.stringify(res.data));
+    process.exit(1);
+  }
+
+  const submissionId = res.data?.submission_id;
   if (!submissionId) {
-    console.error("❌ No submission_id returned:", res.data);
+    console.error("❌ No submission_id in response. Full response:");
+    console.error(JSON.stringify(res.data, null, 2));
     process.exit(1);
   }
 
@@ -61,24 +98,29 @@ async function submitSolution() {
 
 async function pollResult(submissionId) {
   const checkUrl = `https://leetcode.com/submissions/detail/${submissionId}/check/`;
-  const maxAttempts = 15;
+  const maxAttempts = 20;
   const delayMs = 2000;
 
-  console.log("⏳ Polling for result...");
+  console.log("\n⏳ Polling for result...");
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     await new Promise((r) => setTimeout(r, delayMs));
 
-    const res = await axios.get(checkUrl, { headers: HEADERS });
-    const data = res.data;
+    const res = await axios.get(checkUrl, {
+      headers: HEADERS,
+      validateStatus: () => true,
+    });
 
-    console.log(`  Attempt ${attempt}: state = ${data.state}`);
-
-    if (data.state === "SUCCESS") {
-      return data;
+    if (res.status !== 200) {
+      console.error(`❌ Poll HTTP ${res.status}:`, JSON.stringify(res.data));
+      process.exit(1);
     }
 
-    if (data.state === "FAILURE" || data.state === "RUNTIME_ERROR" || data.state === "COMPILE_ERROR") {
+    const data = res.data;
+    console.log(`  Attempt ${attempt}/${maxAttempts}: state = ${data.state}`);
+
+    if (data.state === "SUCCESS" || data.state === "FAILURE" ||
+        data.state === "RUNTIME_ERROR" || data.state === "COMPILE_ERROR") {
       return data;
     }
   }
@@ -97,17 +139,16 @@ function printResult(data) {
     20: "🔨 Compile Error",
   };
 
-  const statusMsg = statusMap[data.status_code] || `Status code: ${data.status_code}`;
+  const statusMsg = statusMap[data.status_code] || `Unknown status code: ${data.status_code}`;
   console.log(`\n📊 Result: ${statusMsg}`);
 
   if (data.status_code === 10) {
     console.log(`   Runtime  : ${data.status_runtime}`);
     console.log(`   Memory   : ${data.status_memory}`);
     console.log(`   Beat     : ${data.runtime_percentile?.toFixed(1) ?? "?"}% by runtime`);
-  } else if (data.compile_error) {
-    console.log(`   Error    : ${data.compile_error}`);
-  } else if (data.runtime_error) {
-    console.log(`   Error    : ${data.runtime_error}`);
+  } else {
+    // Print everything for debugging
+    console.log("   Full result:", JSON.stringify(data, null, 2));
   }
 }
 
@@ -125,6 +166,7 @@ async function main() {
       console.error("❌ HTTP Error:", err.response.status, JSON.stringify(err.response.data));
     } else {
       console.error("❌ Error:", err.message);
+      console.error(err.stack);
     }
     process.exit(1);
   }
