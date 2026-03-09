@@ -1,27 +1,32 @@
-name: LeetCode Daily Streak
+name: LeetCode Daily Submit
 
 on:
   schedule:
-    - cron: "0 3 * * *"
-  workflow_dispatch:
+    # Runs every day at 2:30 AM UTC (8:00 AM IST)
+    # Adjust the cron to your preferred time: https://crontab.guru
+    - cron: '30 2 * * *'
+  workflow_dispatch:   # Also allows manual trigger from GitHub UI
 
 jobs:
   submit:
+    name: Submit Two Sum
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Run submission script
-        run: node submit.js
+      - name: Run submission
         env:
           LEETCODE_SESSION: ${{ secrets.LEETCODE_SESSION }}
+          LEETCODE_CSRF: ${{ secrets.LEETCODE_CSRF }}
+        run: node src/submit.js
