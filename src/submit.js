@@ -1,6 +1,10 @@
 require("dotenv").config();
 const axios = require("axios");
 
+// NOTE: LeetCode sometimes silently drops submissions from datacenter IPs
+// (GitHub Actions uses Azure IPs). We verify the submission actually landed
+// on the profile by checking recent submissions via GraphQL after submitting.
+
 const SESSION = process.env.LEETCODE_SESSION;
 const CSRF = process.env.LEETCODE_CSRF;
 
@@ -152,6 +156,56 @@ function printResult(data) {
   }
 }
 
+async function verifyOnProfile(submissionId) {
+  console.log("\n🔍 Verifying submission appears on profile...");
+
+  // GraphQL query to fetch recent submissions for Two Sum (question slug: two-sum)
+  const query = `
+    query recentSubmissions($username: String!, $limit: Int!) {
+      recentAcSubmissionList(username: $username, limit: $limit) {
+        id
+        title
+        timestamp
+      }
+    }
+  `;
+
+  // Decode username from session JWT (middle base64 segment)
+  const payload = JSON.parse(
+    Buffer.from(SESSION.split(".")[1], "base64").toString()
+  );
+  const username = payload.username || payload.user_slug;
+  console.log(`   Checking profile: ${username}`);
+
+  const res = await axios.post(
+    "https://leetcode.com/graphql",
+    { query, variables: { username, limit: 10 } },
+    { headers: HEADERS, validateStatus: () => true }
+  );
+
+  if (res.status !== 200) {
+    console.warn(`⚠️  Could not verify profile (HTTP ${res.status}) — submission may still have gone through.`);
+    return;
+  }
+
+  const list = res.data?.data?.recentAcSubmissionList ?? [];
+  const found = list.find((s) => String(s.id) === String(submissionId));
+
+  if (found) {
+    console.log(`✅ VERIFIED — submission ${submissionId} appears on profile!`);
+    console.log(`   Title    : ${found.title}`);
+    console.log(`   Time     : ${new Date(found.timestamp * 1000).toUTCString()}`);
+  } else {
+    console.error("❌ SUBMISSION NOT ON PROFILE — LeetCode likely blocked the request from this IP.");
+    console.error("   Submission IDs from GraphQL:", list.map((s) => s.id).join(", ") || "(none)");
+    console.error("   Expected ID:", submissionId);
+    console.error("\n   ⚠️  FIX: LeetCode blocks datacenter IPs (GitHub Actions = Azure IP).");
+    console.error("   Switch to a self-hosted runner on your own machine:");
+    console.error("   https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners");
+    process.exit(1);
+  }
+}
+
 async function main() {
   try {
     const submissionId = await submitSolution();
@@ -161,6 +215,8 @@ async function main() {
     if (result.status_code !== 10) {
       process.exit(1);
     }
+
+    await verifyOnProfile(submissionId);
   } catch (err) {
     if (err.response) {
       console.error("❌ HTTP Error:", err.response.status, JSON.stringify(err.response.data));
