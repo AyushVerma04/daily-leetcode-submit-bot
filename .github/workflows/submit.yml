@@ -8,7 +8,7 @@ on:
 
 jobs:
   submit:
-    name: Submit Two Sum
+    name: Submit Random Java Problem
     runs-on: ubuntu-latest
 
     steps:
@@ -28,4 +28,9 @@ jobs:
         env:
           LEETCODE_SESSION: ${{ secrets.LEETCODE_SESSION }}
           LEETCODE_CSRF: ${{ secrets.LEETCODE_CSRF }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          QUESTION_SEARCH_LIMIT: ${{ vars.QUESTION_SEARCH_LIMIT }}
+          MAX_RANDOM_TRIES: ${{ vars.MAX_RANDOM_TRIES }}
+          INCLUDE_PAID_QUESTIONS: ${{ vars.INCLUDE_PAID_QUESTIONS }}
         run: node src/submit.js

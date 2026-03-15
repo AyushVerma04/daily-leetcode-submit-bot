@@ -1,6 +1,6 @@
 # 🤖 LeetCode Daily Submit Bot
 
-Automatically submits a **Two Sum** solution to LeetCode every day using GitHub Actions — keeping your streak alive without opening your laptop.
+Automatically picks a **random LeetCode problem** each day, generates a **Java** solution with Groq, and submits it using GitHub Actions.
 
 ---
 
@@ -12,7 +12,7 @@ leetcode-streak-bot/
 │   └── workflows/
 │       └── submit.yml       ← GitHub Actions cron job
 ├── src/
-│   └── submit.js            ← Core submission logic
+│   └── submit.js            ← Random question + Groq Java submission logic
 ├── .env.example             ← Template for environment variables
 ├── .gitignore
 ├── package.json
@@ -39,12 +39,22 @@ leetcode-streak-bot/
 
 Go to your repo on GitHub → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-Add these two secrets:
+Add these secrets:
 
 | Secret Name        | Value                        |
 |--------------------|------------------------------|
 | `LEETCODE_SESSION` | Your `LEETCODE_SESSION` cookie |
 | `LEETCODE_CSRF`    | Your `csrftoken` cookie       |
+| `GROQ_API_KEY`     | Your Groq API key             |
+
+Optional repository variables (Settings → Secrets and variables → Actions → Variables):
+
+| Variable Name             | Default                    |
+|---------------------------|----------------------------|
+| `GROQ_MODEL`              | `llama-3.3-70b-versatile` |
+| `QUESTION_SEARCH_LIMIT`   | `50`                       |
+| `MAX_RANDOM_TRIES`        | `25`                       |
+| `INCLUDE_PAID_QUESTIONS`  | `false`                    |
 
 ---
 
@@ -70,7 +80,7 @@ npm install
 
 # Copy and fill in your credentials
 cp .env.example .env
-# Edit .env with your LEETCODE_SESSION and LEETCODE_CSRF
+# Edit .env with LEETCODE_SESSION, LEETCODE_CSRF, and GROQ_API_KEY
 
 # Run
 node src/submit.js
@@ -82,6 +92,7 @@ node src/submit.js
 
 - This bot submits only under **your own account** using your own session credentials
 - It is personal automation — similar to using the LeetCode website yourself
+- Avoid deceptive behavior like intentional wrong submissions to manipulate profile stats
 - Do **not** share your session cookies with anyone
 - LeetCode cookies expire; update your GitHub secrets when they do
 
