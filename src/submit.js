@@ -78,40 +78,41 @@ async function graphqlRequest(query, variables) {
 }
 
 async function fetchProblemPage(skip, limit) {
-  const query = `
-    query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) {
-      problemsetQuestionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: $filters) {
-        total: totalNum
-        questions: data {
-          acRate
+  const queryV2 = `
+    query problemsetQuestionListV2($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionFilterInput, $searchKeyword: String) {
+      problemsetQuestionListV2(
+        categorySlug: $categorySlug
+        limit: $limit
+        skip: $skip
+        filters: $filters
+        searchKeyword: $searchKeyword
+      ) {
+        total: totalLength
+        questions {
           difficulty
-          freqBar
           frontendQuestionId: questionFrontendId
-          isFavor
-          paidOnly: isPaidOnly
+          paidOnly
           status
           title
           titleSlug
           topicTags {
             name
-            id
             slug
           }
-          hasSolution
-          hasVideoSolution
         }
       }
     }
   `;
 
-  const data = await graphqlRequest(query, {
+  const data = await graphqlRequest(queryV2, {
     categorySlug: "",
     limit,
     skip,
-    filters: {},
+    filters: null,
+    searchKeyword: "",
   });
 
-  return data.problemsetQuestionList;
+  return data.problemsetQuestionListV2;
 }
 
 async function fetchQuestionDetails(titleSlug) {
